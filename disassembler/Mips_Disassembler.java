@@ -4,6 +4,8 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 
 import common.InstructionType;
 
@@ -12,6 +14,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 {
 	FileInputStream bin;
 	BufferedWriter asm;
+	String inFile;
 	
 	public Mips_Disassembler() throws IOException
 	{
@@ -20,7 +23,8 @@ public class Mips_Disassembler //converts from a binary to an ASM
 	
 	public Mips_Disassembler(String out, String in) throws IOException
 	{
-		bin = new FileInputStream(in);
+		inFile = in;
+		bin = new FileInputStream(inFile);
 		asm = new BufferedWriter(new FileWriter(out,false));
 	}
 	
@@ -30,15 +34,59 @@ public class Mips_Disassembler //converts from a binary to an ASM
 		
 		int bytesRead = 0, currentWord = 0;
 		
-		do		
+		int address = 0;
+		
+		int labelNum = 0;
+		
+		Map<Integer,String> addressMap = new HashMap<Integer,String>();
+		
+		//first create labels
+		for(bytesRead = bin.read(b); bytesRead > 0; bytesRead = bin.read(b))
 		{
+			int key = 0;
+			currentWord = ByteBuffer.wrap(b).getInt();
+			if(isBranch(currentWord))
+			{
+				key = currentWord & 0xFFFF;
+				if(!addressMap.containsKey(address + (short)key)) //don't place a key already there
+				{
+					addressMap.put((address + (short)key), "label" + Integer.toString(labelNum++) + ":");
+				}
+			}
+			else if(isJump(currentWord))
+			{
+				key = currentWord & 0xFFFFFF;
+				if(key > 0x800000) //if key is 24 bit negative number
+				{
+					key |= 0xFF000000; //sign extend
+				}
+				if(!addressMap.containsKey(key))
+				{
+					addressMap.put(key, "label" + Integer.toString(labelNum++) + ":");
+				}
+			}
+			address++;
+		}
+
+		bin = new FileInputStream(inFile); //reset stream
+		
+		address = 0;
+		
+		do		
+		{			
+			if(addressMap.containsKey(address)) //check if contains label
+			{
+				asm.write(addressMap.get(address) + "\n"); //print label and next line
+			}	
+			//now go ahead and print the instruction
 			bytesRead = bin.read(b);
 			
 			currentWord = ByteBuffer.wrap(b).getInt();
 			
-			if(bytesRead >= 0)
+			if(bytesRead > 0)
 			{
 				asm.write(disassembleInstruction(currentWord) + "\n");
+				address++;
 			}
 		}while(bytesRead >= 0);
 		
@@ -46,6 +94,29 @@ public class Mips_Disassembler //converts from a binary to an ASM
 		bin.close();
 	}
 	
+	private boolean isBranch(int currentWord)
+	{
+		int operation = parseOperation(currentWord);
+		if(operation == 0x4 || operation == 0x5) //j and jal
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private boolean isJump(int currentWord)
+	{
+		int operation = parseOperation(currentWord);
+		switch(operation)
+		{
+		case 0x2:
+		case 0x3:
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	private String disassembleInstruction(int currentWord) throws Exception
 	{
 		int operation = parseOperation(currentWord);
@@ -195,14 +266,14 @@ public class Mips_Disassembler //converts from a binary to an ASM
 			switch(operation)
 			{
 			case 0x02:
-				retVal += "j $";
+				retVal += "j 0x";
 				break;
 			case 0x03:
-				retVal += "jal $";
+				retVal += "jal 0x";
 				break;
 			}
 			
-			retVal += Integer.toString(0xFFFF & currentWord);
+			retVal += Integer.toHexString(0xFFFFFF & currentWord);
 			
 			return retVal;
 		}
