@@ -12,7 +12,7 @@ public class Mips_Operation
 	private InstructionType type;
 	private int operation;
 	private int rs, rt, rd, shamt = 0, funct; // R and I type fields
-	private int immediate; // needed for I type fields only
+	private short immediate; // needed for I type fields only
 	private int address; // used for J type instructions
 	private boolean decoded = false;
 
@@ -275,7 +275,7 @@ public class Mips_Operation
 		{
 			this.rt = registers.get(parameters.get(1).toLowerCase()); // first arg is rt, the destination
 			
-			this.immediate = this.unLabel(parameters.get(immediateValueIndex).toLowerCase(), currentAddress, BASE_ADDRESS, labels, InstructionType.I);
+			this.immediate = (short) this.unLabel(parameters.get(immediateValueIndex).toLowerCase(), currentAddress, BASE_ADDRESS, labels, InstructionType.I);
 
 			if(parameters.size() >= 4) this.rs = registers.get(parameters.get(rsValueIndex).toLowerCase()); //there is only an rs during a load or store exept LUI
 
@@ -319,11 +319,11 @@ public class Mips_Operation
 		
 		if(labels.containsKey(param))
 		{
-			ret =  labels.get(param) - (currentAddress - BASE_ADDRESS);
+			ret =  labels.get(param) - (currentAddress + 1 - BASE_ADDRESS); //add 1 since we branch from next address
 		}
 		else if(isHexInteger(param))
 		{
-			ret = Integer.parseInt(param.substring(2, param.length()), 16);
+			ret = Integer.parseInt(param.substring(2, param.length()), 16) - (currentAddress + 1 - BASE_ADDRESS);
 		}
 		else if(isInteger(param))
 		{

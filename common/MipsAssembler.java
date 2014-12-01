@@ -51,13 +51,13 @@ public class MipsAssembler
 			
 			String outName;
 			
-			if(args.length > 3)
+			if(args.length >= 3)
 			{
-				outName = args[3];
+				outName = args[2];
 			}
 			else
 			{
-				outName = "output.mif";
+				outName = "output.asm";
 			}
 			
 			try

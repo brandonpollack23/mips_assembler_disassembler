@@ -15,6 +15,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 	FileInputStream bin;
 	BufferedWriter asm;
 	String inFile;
+	Map<Integer,String> addressMap;
 	
 	public Mips_Disassembler() throws IOException
 	{
@@ -26,6 +27,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 		inFile = in;
 		bin = new FileInputStream(inFile);
 		asm = new BufferedWriter(new FileWriter(out,false));
+		this.addressMap = new HashMap<Integer,String>();
 	}
 	
 	public void disassembleAndClose() throws Exception
@@ -38,7 +40,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 		
 		int labelNum = 0;
 		
-		Map<Integer,String> addressMap = new HashMap<Integer,String>();
+		//Map<Integer,String> addressMap = new HashMap<Integer,String>();
 		
 		//first create labels
 		for(bytesRead = bin.read(b); bytesRead > 0; bytesRead = bin.read(b))
@@ -50,16 +52,12 @@ public class Mips_Disassembler //converts from a binary to an ASM
 				key = currentWord & 0xFFFF;
 				if(!addressMap.containsKey(address + (short)key)) //don't place a key already there
 				{
-					addressMap.put((address + (short)key), "label" + Integer.toString(labelNum++) + ":");
+					addressMap.put((address + 1 + (short)key), "label" + Integer.toString(labelNum++) + ":");
 				}
 			}
 			else if(isJump(currentWord))
 			{
-				key = currentWord & 0xFFFFFF;
-				if(key > 0x800000) //if key is 24 bit negative number
-				{
-					key |= 0xFF000000; //sign extend
-				}
+				key = (currentWord & ((0b11 << 22) | 0xFFFFF) | ((address+1) & 0xFF000000)); //jump includes what would be the next upper 8 bits and the 24 bit immediate value, who's lsb 2 bits are ignored
 				if(!addressMap.containsKey(key))
 				{
 					addressMap.put(key, "label" + Integer.toString(labelNum++) + ":");
@@ -76,7 +74,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 		{			
 			if(addressMap.containsKey(address)) //check if contains label
 			{
-				asm.write(addressMap.get(address) + "\n"); //print label and next line
+				asm.write(addressMap.get(address) + "-- 0x" + Integer.toString(address,16) + "\n"); //print label and next line
 			}	
 			//now go ahead and print the instruction
 			bytesRead = bin.read(b);
@@ -85,7 +83,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 			
 			if(bytesRead > 0)
 			{
-				asm.write(disassembleInstruction(currentWord) + "\n");
+				asm.write(disassembleInstruction(currentWord, address) + "\n");
 				address++;
 			}
 		}while(bytesRead >= 0);
@@ -117,7 +115,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 		}
 	}
 
-	private String disassembleInstruction(int currentWord) throws Exception
+	private String disassembleInstruction(int currentWord, int address) throws Exception
 	{
 		int operation = parseOperation(currentWord);
 		int function; //for use in R type instructions
@@ -226,16 +224,16 @@ public class Mips_Disassembler //converts from a binary to an ASM
 				retVal += "bne ";
 				break;
 			case 0x24: //load operations are special, so we'll return from here
-				retVal += "lbu $" + Integer.toString(parseRT(currentWord)) + ", " + /*immediate value*/ Integer.toString(0xFFFF & currentWord) + "($" + Integer.toString(parseRS(currentWord)) + ")";
+				retVal += "lbu $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16) + "($" + Integer.toString(parseRS(currentWord)) + ")";
 				return retVal;
 			case 0x25:
-				retVal += "lhu $" + Integer.toString(parseRT(currentWord)) + ", " + /*immediate value*/ Integer.toString(0xFFFF & currentWord) + "($" + Integer.toString(parseRS(currentWord)) + ")";
+				retVal += "lhu $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16) + "($" + Integer.toString(parseRS(currentWord)) + ")";
 				return retVal;
 			case 0x0F:
-				retVal += "lui $" + Integer.toString(parseRT(currentWord)) + ", " + /*immediate value*/ Integer.toString(0xFFFF & currentWord);
+				retVal += "lui $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16);
 				return retVal;
 			case 0x23:
-				retVal += "lw $" + Integer.toString(parseRT(currentWord)) + ", $" + /*immediate value*/ Integer.toString(0xFFFF & currentWord) + "($" + Integer.toString(parseRS(currentWord)) + ")";
+				retVal += "lw $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16) + "($" + Integer.toString(parseRS(currentWord)) + ")";
 				return retVal;
 			case 0x0D:
 				retVal += "ori ";
@@ -247,17 +245,30 @@ public class Mips_Disassembler //converts from a binary to an ASM
 				retVal += "sltiu ";
 				break;
 			case 0x28:
-				retVal += "sb $" + Integer.toString(parseRT(currentWord)) + ", $" + /*immediate value*/ Integer.toString(0xFFFF & currentWord) + "($" + Integer.toString(parseRS(currentWord)) + ")";
+				retVal += "sb $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16) + "($" + Integer.toString(parseRS(currentWord)) + ")";
 				return retVal;
 			case 0x29:
-				retVal += "sh $" + Integer.toString(parseRT(currentWord)) + ", $" + /*immediate value*/ Integer.toString(0xFFFF & currentWord) + "($" + Integer.toString(parseRS(currentWord)) + ")";
+				retVal += "sh $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16) + "($" + Integer.toString(parseRS(currentWord)) + ")";
 				return retVal;
 			case 0x2B:
-				retVal += "sw $" + Integer.toString(parseRT(currentWord)) + ", $" + /*immediate value*/ Integer.toString(0xFFFF & currentWord) + "($" + Integer.toString(parseRS(currentWord)) + ")";
+				retVal += "sw $" + Integer.toString(parseRT(currentWord)) + ", 0x" + /*immediate value*/ Integer.toString(0xFFFF & currentWord,16) + "($" + Integer.toString(parseRS(currentWord)) + ")";
 				return retVal;
 			}
 			
-			retVal += "$" + Integer.toString(parseRT(currentWord)) + ", $" + Integer.toString(parseRS(currentWord)) + ", " + /*immediate value*/ Integer.toString(0xFFFF & currentWord);
+			String branchAddress_str;
+			int branchAddress = (short) (0xFFFF & currentWord) + address + 1;
+			
+			if(addressMap.containsKey(branchAddress) && (operation == 0x04 || operation == 0x05))
+			{
+				branchAddress_str = addressMap.get(branchAddress) + "-- 0x" + Integer.toString(address,16);
+				branchAddress_str = branchAddress_str.replace(':', ' ');
+			}
+			else
+			{
+				branchAddress_str = "0x" + Integer.toString(0xFFFF & currentWord,16);
+			}
+			
+			retVal += "$" + Integer.toString(parseRT(currentWord)) + ", $" + Integer.toString(parseRS(currentWord)) + ", " + /*immediate value*/ branchAddress_str;
 			
 			return retVal;
 		}
@@ -266,14 +277,23 @@ public class Mips_Disassembler //converts from a binary to an ASM
 			switch(operation)
 			{
 			case 0x02:
-				retVal += "j 0x";
+				retVal += "j ";
 				break;
 			case 0x03:
-				retVal += "jal 0x";
+				retVal += "jal ";
 				break;
 			}
 			
-			retVal += Integer.toHexString(0xFFFFFF & currentWord);
+			int jumpAddress = (currentWord & ((0b11 << 22) | 0xFFFFF) | ((address+1) & 0xFF000000));
+			
+			if(addressMap.containsKey(jumpAddress))
+			{
+				retVal += addressMap.get(jumpAddress).replace(':', ' ') + "-- 0x" + Integer.toString(address,16);
+			}
+			else
+			{
+				retVal += "0x" + Integer.toHexString((0xFFFFFF & currentWord) << 2);
+			}
 			
 			return retVal;
 		}
@@ -301,7 +321,7 @@ public class Mips_Disassembler //converts from a binary to an ASM
 
 	private int parseFunction(int currentWord)
 	{
-		return (0x1F & currentWord); //least sig 5 bits are the function
+		return (0x3F & currentWord); //least sig 5 bits are the function
 	}
 
 	private int parseOperation(int currentWord)
